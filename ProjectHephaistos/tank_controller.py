@@ -1,6 +1,7 @@
 # pip install pyserial pynput
 
 import serial
+import sys
 import threading
 from pynput import keyboard
 
@@ -80,14 +81,16 @@ def keyboard_listener():
         listener.join()
 
 def serial_reader():
-    while True:
-        try:
+    try:
+        while True:
             line = ser.readline().decode('utf-8', errors='ignore').rstrip()
             if line:
                 print(f"ESP32: {line}")
-        except serial.SerialException as e:
-            print(f"Serial error: {e}")
-            break
+    except KeyboardInterrupt:
+        print("Keyboard interrupt received. Closing serial port and exiting...")
+        ser.close()
+        # Optionally do other cleanup here
+        sys.exit(0)
 
 # Start the keyboard listener in a separate thread
 keyboard_thread = threading.Thread(target=keyboard_listener)
