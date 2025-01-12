@@ -4,12 +4,14 @@
 
 // Define control mode
 #define CONTROL_MODE_SERIAL
+#define PIN 27
 
 // Create a pointer to the control interface
 TankControlInterface* tankControl = nullptr;
 
 void setup() {
     Serial.begin(115200);
+    pinMode(PIN , OUTPUT);
 
 #ifdef CONTROL_MODE_SERIAL
     tankControl = new SerialControl();
@@ -50,6 +52,13 @@ void loop() {
     Serial.printf("Turret Rotation: %d\n", turretRot);
     Serial.printf("Turret Elevation: %d\n", turretElev);
     Serial.printf("Flamethrower Active: %s\n", flamethrower ? "Yes" : "No");
+    if (flamethrower == true) {
+      digitalWrite(PIN, HIGH);
+    } else {
+      digitalWrite(PIN, LOW);
+    }
+
+
     Serial.println("---------------------------------");
 
     // Delay to prevent flooding the serial output
