@@ -1,6 +1,5 @@
 #include "KeyboardControl.h"
 
-// Static members
 KeyboardControl* KeyboardControl::instance = nullptr;
 ControllerPtr KeyboardControl::keyboardController = nullptr;
 
@@ -20,11 +19,13 @@ KeyboardControl::KeyboardControl()
       turretElevatePressed(false),
       turretLowerPressed(false),
       firePressed(false),
+      shiftPressedCurrent(false),
+      shiftPressedPrevious(false),
+      ctrlPressedCurrent(false),
+      ctrlPressedPrevious(false),
       lastUpdateTime(0)
 {
     instance = this;
-
-    // Initialize Bluepad32 for keyboard
     BP32.setup(&KeyboardControl::onConnectedController, &KeyboardControl::onDisconnectedController);
     BP32.enableNewBluetoothConnections(true);
 
@@ -32,15 +33,12 @@ KeyboardControl::KeyboardControl()
 }
 
 KeyboardControl::~KeyboardControl() {
-    // Optionally forget keys or do other cleanup
-    // BP32.forgetBluetoothKeys();
+    // Optionally: BP32.forgetBluetoothKeys();
 }
 
 void KeyboardControl::update() {
-    // Poll Bluepad32
     BP32.update();
 
-    // If a keyboard is connected, process it
     if (keyboardController && keyboardController->isConnected()) {
         processKeyboard(keyboardController);
     }
@@ -74,7 +72,7 @@ int KeyboardControl::getCurrentGear() const {
     return currentGear;
 }
 
-// Static callbacks
+// static callbacks
 void KeyboardControl::onConnectedController(ControllerPtr ctl) {
     if (ctl->isKeyboard()) {
         Serial.println("Bluetooth Keyboard connected.");
@@ -97,7 +95,7 @@ void KeyboardControl::processKeyboard(ControllerPtr ctl) {
     }
     lastUpdateTime = currentTime;
 
-    // Reset all pressed states
+    // 1) Movement keys
     forwardPressed       = ctl->isKeyPressed(KeyboardKey::Keyboard_W);
     backPressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_S);
     leftPressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_A);
@@ -108,27 +106,35 @@ void KeyboardControl::processKeyboard(ControllerPtr ctl) {
     turretLowerPressed   = ctl->isKeyPressed(KeyboardKey::Keyboard_DownArrow);
     firePressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_Spacebar);
 
-    // Gear up if Shift pressed, gear down if Ctrl pressed
-    bool shiftPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftShift) ||
-                        ctl->isKeyPressed(KeyboardKey::Keyboard_RightShift);
-    bool ctrlPressed  = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftControl) ||
-                        ctl->isKeyPressed(KeyboardKey::Keyboard_RightControl);
+    // 2) Edge detection for gear shifting
+    // Check shift keys
+    shiftPressedCurrent = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftShift) ||
+                          ctl->isKeyPressed(KeyboardKey::Keyboard_RightShift);
+    // Check ctrl keys
+    ctrlPressedCurrent  = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftControl) ||
+                          ctl->isKeyPressed(KeyboardKey::Keyboard_RightControl);
 
-    if (shiftPressed && currentGear < 5) {
+    // Rising edge for SHIFT => gear up
+    if (shiftPressedCurrent && !shiftPressedPrevious && currentGear < 5) {
         currentGear++;
         Serial.printf("Gear shifted up to %d\n", currentGear);
     }
-    if (ctrlPressed && currentGear > 1) {
+    // Rising edge for CTRL => gear down
+    if (ctrlPressedCurrent && !ctrlPressedPrevious && currentGear > 1) {
         currentGear--;
         Serial.printf("Gear shifted down to %d\n", currentGear);
     }
 
-    // Now update control variables
+    // Save old states
+    shiftPressedPrevious = shiftPressedCurrent;
+    ctrlPressedPrevious  = ctrlPressedCurrent;
+
+    // 3) Update final variables
     updateControlVariables();
 }
 
 void KeyboardControl::updateControlVariables() {
-    // Movement
+    // Movement: same logic as other classes
     int forwardBackward = 0;
     int turn = 0;
 
@@ -146,7 +152,6 @@ void KeyboardControl::updateControlVariables() {
     }
 
     float gearScaling = (float)currentGear / 5.0f;
-
     leftTrackSpeed  = constrain((forwardBackward + turn) * gearScaling, -100, 100);
     rightTrackSpeed = constrain((forwardBackward - turn) * gearScaling, -100, 100);
 

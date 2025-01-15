@@ -3,7 +3,7 @@
 
 #include "TankControlInterface.h"
 #include <Arduino.h>
-#include <Bluepad32.h> // to detect keyboard events
+#include <Bluepad32.h>
 
 class KeyboardControl : public TankControlInterface {
 public:
@@ -42,7 +42,7 @@ private:
     int turretElevation;
     bool flamethrowerActive;
 
-    // State variables
+    // Press states
     bool forwardPressed;
     bool backPressed;
     bool leftPressed;
@@ -52,6 +52,12 @@ private:
     bool turretElevatePressed;
     bool turretLowerPressed;
     bool firePressed;
+
+    // Edge detection for gear up/down
+    bool shiftPressedCurrent;
+    bool shiftPressedPrevious;
+    bool ctrlPressedCurrent;
+    bool ctrlPressedPrevious;
 
     unsigned long lastUpdateTime;
     const unsigned long updateInterval = 50; // ms
