@@ -5,6 +5,12 @@
 #include <Arduino.h>
 #include <Bluepad32.h>
 
+// -------------------------------
+// Define a joystick deadzone
+// (Tune this as needed)
+// -------------------------------
+#define JOYSTICK_DEADZONE 100
+
 class BluetoothControl : public TankControlInterface {
 public:
     BluetoothControl();
@@ -54,6 +60,10 @@ private:
     bool turretElevatePressed;
     bool turretLowerPressed;
     bool firePressed;
+
+    // For edge detection on gear shifting
+    bool dpadUpPrevious;
+    bool dpadDownPrevious;
 
     // Update timing
     unsigned long lastUpdateTime;

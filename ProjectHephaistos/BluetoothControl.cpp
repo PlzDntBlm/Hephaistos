@@ -20,6 +20,9 @@ BluetoothControl::BluetoothControl()
       turretElevatePressed(false),
       turretLowerPressed(false),
       firePressed(false),
+      // NEW: Initialize gear-shift states for edge detection
+      dpadUpPrevious(false),
+      dpadDownPrevious(false),
       lastUpdateTime(0)
 {
     instance = this;
@@ -32,7 +35,7 @@ BluetoothControl::BluetoothControl()
 }
 
 BluetoothControl::~BluetoothControl() {
-    // Optionally forget Bluetooth keys if you want to force re-pairing
+    // Optionally forget Bluetooth keys if needed:
     // BP32.forgetBluetoothKeys();
 }
 
@@ -100,7 +103,7 @@ void BluetoothControl::processGamepad(ControllerPtr ctl) {
     }
     lastUpdateTime = currentTime;
 
-    // Reset the pressed states
+    // Reset the pressed states each cycle
     forwardPressed       = false;
     backPressed          = false;
     leftPressed          = false;
@@ -111,58 +114,84 @@ void BluetoothControl::processGamepad(ControllerPtr ctl) {
     turretLowerPressed   = false;
     firePressed          = false;
 
-    // Example usage: interpret left joystick Y for forward/back
-    // (on many controllers, up is negative Y, so adjust logic as needed)
-    int16_t axisY = ctl->axisY(); // -512 up, +511 down
-    if (axisY < -100) { 
-        forwardPressed = true; 
-    } else if (axisY > 100) { 
-        backPressed = true; 
+    // -----------------------------
+    // 1) Read and apply deadzone
+    // -----------------------------
+    int16_t axisY = ctl->axisY();  // range ~ -512..+511
+    int16_t axisX = ctl->axisX();
+
+    if (abs(axisY) < JOYSTICK_DEADZONE) {
+        axisY = 0;
+    }
+    if (abs(axisX) < JOYSTICK_DEADZONE) {
+        axisX = 0;
     }
 
-    // Interpret left joystick X for turning
-    int16_t axisX = ctl->axisX(); // -512 left, +511 right
-    if (axisX < -100) {
+    // If axisY < 0 => forward, axisY > 0 => back
+    if (axisY < 0) {
+        forwardPressed = true;
+    } else if (axisY > 0) {
+        backPressed = true;
+    }
+
+    // If axisX < 0 => left, axisX > 0 => right
+    if (axisX < 0) {
         leftPressed = true;
-    } else if (axisX > 100) {
+    } else if (axisX > 0) {
         rightPressed = true;
     }
 
-    // For turret: use right joystick or certain buttons
-    int16_t axisRX = ctl->axisRX();  // -512 left, +511 right
-    int16_t axisRY = ctl->axisRY();  // -512 up, +511 down
+    // For turret, let's read the right joystick as well
+    int16_t axisRX = ctl->axisRX(); 
+    int16_t axisRY = ctl->axisRY();
 
-    if (axisRX < -100) {
+    if (abs(axisRX) < JOYSTICK_DEADZONE) {
+        axisRX = 0;
+    }
+    if (abs(axisRY) < JOYSTICK_DEADZONE) {
+        axisRY = 0;
+    }
+
+    if (axisRX < 0) {
         turretLeftPressed = true;
-    } else if (axisRX > 100) {
+    } else if (axisRX > 0) {
         turretRightPressed = true;
     }
 
-    if (axisRY < -100) {
+    if (axisRY < 0) {
         turretElevatePressed = true;
-    } else if (axisRY > 100) {
+    } else if (axisRY > 0) {
         turretLowerPressed = true;
     }
 
-    // Check a button for flamethrower
-    // For example, "A" button on many controllers
+    // Example: "A" button for flamethrower
     if (ctl->a()) {
         firePressed = true;
     }
 
-    // Gear shifting with D-Pad up/down
+    // -----------------------------
+    // 2) Edge detection for gear shift
+    // -----------------------------
     uint8_t dpadVal = ctl->dpad();
-    // dpad() returns 0x00 to 0x08 or 0x0F depending on library
-    // We'll do a simple check if dpadVal == DPAD_UP or DPAD_DOWN
-    if (dpadVal == DPAD_UP && currentGear < 5) {
+    bool dpadUpCurrent   = (dpadVal == DPAD_UP);
+    bool dpadDownCurrent = (dpadVal == DPAD_DOWN);
+
+    // If we see an UP press that wasn't pressed last time, gear up
+    if (dpadUpCurrent && !dpadUpPrevious && currentGear < 5) {
         currentGear++;
         Serial.printf("Gear shifted up to %d\n", currentGear);
-    } else if (dpadVal == DPAD_DOWN && currentGear > 1) {
+    }
+    // If we see a DOWN press that wasn't pressed last time, gear down
+    if (dpadDownCurrent && !dpadDownPrevious && currentGear > 1) {
         currentGear--;
         Serial.printf("Gear shifted down to %d\n", currentGear);
     }
 
-    // Now we update the control variables
+    // Update our "previous" states
+    dpadUpPrevious   = dpadUpCurrent;
+    dpadDownPrevious = dpadDownCurrent;
+
+    // Now we update the final control variables
     updateControlVariables();
 }
 
