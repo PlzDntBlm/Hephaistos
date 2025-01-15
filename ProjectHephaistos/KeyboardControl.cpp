@@ -1,48 +1,53 @@
 #include "KeyboardControl.h"
 
-// Initialize static instance pointer
+// Static members
 KeyboardControl* KeyboardControl::instance = nullptr;
+ControllerPtr KeyboardControl::keyboardController = nullptr;
 
 KeyboardControl::KeyboardControl()
-    : keyboardController(nullptr),
-      currentGear(1),
+    : currentGear(1),
       leftTrackSpeed(0),
       rightTrackSpeed(0),
       turretRotation(0),
       turretElevation(0),
       flamethrowerActive(false),
-      wPressed(false),
-      sPressed(false),
-      aPressed(false),
-      dPressed(false),
-      upPressed(false),
-      downPressed(false),
+      forwardPressed(false),
+      backPressed(false),
       leftPressed(false),
       rightPressed(false),
-      ePressed(false),
-      qPressed(false),
-      spacePressed(false),
-      lastUpdateTime(0) {
+      turretLeftPressed(false),
+      turretRightPressed(false),
+      turretElevatePressed(false),
+      turretLowerPressed(false),
+      firePressed(false),
+      lastUpdateTime(0)
+{
     instance = this;
 
-    // Initialize Bluepad32
+    // Initialize Bluepad32 for keyboard
     BP32.setup(&KeyboardControl::onConnectedController, &KeyboardControl::onDisconnectedController);
-
-    // Enable new Bluetooth connections
     BP32.enableNewBluetoothConnections(true);
+
+    Serial.println("KeyboardControl Initialized. Waiting for a BT Keyboard...");
 }
 
 KeyboardControl::~KeyboardControl() {
-    BP32.forgetBluetoothKeys();
+    // Optionally forget keys or do other cleanup
+    // BP32.forgetBluetoothKeys();
 }
 
 void KeyboardControl::update() {
-    // Fetch controller data
+    // Poll Bluepad32
     BP32.update();
 
+    // If a keyboard is connected, process it
     if (keyboardController && keyboardController->isConnected()) {
         processKeyboard(keyboardController);
     }
+}
+
+bool KeyboardControl::isConnected() const {
+    return (keyboardController && keyboardController->isConnected());
 }
 
 int KeyboardControl::getLeftTrackSpeed() const {
@@ -69,18 +74,18 @@ int KeyboardControl::getCurrentGear() const {
     return currentGear;
 }
 
-// Static callback functions
+// Static callbacks
 void KeyboardControl::onConnectedController(ControllerPtr ctl) {
     if (ctl->isKeyboard()) {
-        Serial.println("Keyboard connected via Bluetooth.");
-        instance->keyboardController = ctl;
+        Serial.println("Bluetooth Keyboard connected.");
+        keyboardController = ctl;
     }
 }
 
 void KeyboardControl::onDisconnectedController(ControllerPtr ctl) {
-    if (ctl == instance->keyboardController) {
-        Serial.println("Keyboard disconnected from Bluetooth.");
-        instance->keyboardController = nullptr;
+    if (ctl == keyboardController) {
+        Serial.println("Bluetooth Keyboard disconnected.");
+        keyboardController = nullptr;
     }
 }
 
@@ -92,71 +97,75 @@ void KeyboardControl::processKeyboard(ControllerPtr ctl) {
     }
     lastUpdateTime = currentTime;
 
-    // Reset control variables
-    leftTrackSpeed = 0;
-    rightTrackSpeed = 0;
-    turretRotation = 0;
-    turretElevation = 0;
-    flamethrowerActive = false;
+    // Reset all pressed states
+    forwardPressed       = ctl->isKeyPressed(KeyboardKey::Keyboard_W);
+    backPressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_S);
+    leftPressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_A);
+    rightPressed         = ctl->isKeyPressed(KeyboardKey::Keyboard_D);
+    turretLeftPressed    = ctl->isKeyPressed(KeyboardKey::Keyboard_Q);
+    turretRightPressed   = ctl->isKeyPressed(KeyboardKey::Keyboard_E);
+    turretElevatePressed = ctl->isKeyPressed(KeyboardKey::Keyboard_UpArrow);
+    turretLowerPressed   = ctl->isKeyPressed(KeyboardKey::Keyboard_DownArrow);
+    firePressed          = ctl->isKeyPressed(KeyboardKey::Keyboard_Spacebar);
 
-    // Update key states
-    wPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_W);
-    sPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_S);
-    aPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_A);
-    dPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_D);
-    upPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_UpArrow);
-    downPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_DownArrow);
-    leftPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftArrow);
-    rightPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_RightArrow);
-    ePressed = ctl->isKeyPressed(KeyboardKey::Keyboard_E);
-    qPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_Q);
-    spacePressed = ctl->isKeyPressed(KeyboardKey::Keyboard_Spacebar);
+    // Gear up if Shift pressed, gear down if Ctrl pressed
+    bool shiftPressed = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftShift) ||
+                        ctl->isKeyPressed(KeyboardKey::Keyboard_RightShift);
+    bool ctrlPressed  = ctl->isKeyPressed(KeyboardKey::Keyboard_LeftControl) ||
+                        ctl->isKeyPressed(KeyboardKey::Keyboard_RightControl);
 
-    // Movement control
+    if (shiftPressed && currentGear < 5) {
+        currentGear++;
+        Serial.printf("Gear shifted up to %d\n", currentGear);
+    }
+    if (ctrlPressed && currentGear > 1) {
+        currentGear--;
+        Serial.printf("Gear shifted down to %d\n", currentGear);
+    }
+
+    // Now update control variables
+    updateControlVariables();
+}
+
+void KeyboardControl::updateControlVariables() {
+    // Movement
     int forwardBackward = 0;
     int turn = 0;
 
-    if (wPressed) {
+    if (forwardPressed) {
         forwardBackward += 100;
     }
-    if (sPressed) {
+    if (backPressed) {
         forwardBackward -= 100;
     }
-    if (aPressed) {
+    if (leftPressed) {
         turn -= 100;
     }
-    if (dPressed) {
+    if (rightPressed) {
         turn += 100;
     }
 
-    // Gear scaling
-    float gearScaling = (float)currentGear / 5;
+    float gearScaling = (float)currentGear / 5.0f;
 
-    leftTrackSpeed = constrain((forwardBackward + turn) * gearScaling, -100, 100);
+    leftTrackSpeed  = constrain((forwardBackward + turn) * gearScaling, -100, 100);
     rightTrackSpeed = constrain((forwardBackward - turn) * gearScaling, -100, 100);
 
-    // Gear shifting
-    if (ePressed && currentGear < 5) {
-        currentGear++;
-    }
-    if (qPressed && currentGear > 1) {
-        currentGear--;
-    }
-
-    // Turret control
-    if (leftPressed) {
+    // Turret
+    if (turretLeftPressed) {
         turretRotation = -100;
-    }
-    if (rightPressed) {
+    } else if (turretRightPressed) {
         turretRotation = 100;
-    }
-    if (upPressed) {
-        turretElevation = 100;
-    }
-    if (downPressed) {
-        turretElevation = -100;
+    } else {
+        turretRotation = 0;
     }
 
-    // Flamethrower activation
-    flamethrowerActive = spacePressed;
+    if (turretElevatePressed) {
+        turretElevation = 100;
+    } else if (turretLowerPressed) {
+        turretElevation = -100;
+    } else {
+        turretElevation = 0;
+    }
+
+    flamethrowerActive = firePressed;
 }

@@ -1,5 +1,4 @@
 #include "RCControl.h"
-#include <Arduino.h>
 
 RCControl::RCControl()
     : currentGear(1),
@@ -7,55 +6,66 @@ RCControl::RCControl()
       rightTrackSpeed(0),
       turretRotation(0),
       turretElevation(0),
-      flamethrowerActive(false) {
+      flamethrowerActive(false)
+{
     // Initialize pins
-    pinMode(channelThrottlePin, INPUT);
-    pinMode(channelSteeringPin, INPUT);
-    pinMode(channelGearPin, INPUT);
-    pinMode(channelTurretRotationPin, INPUT);
-    pinMode(channelTurretElevationPin, INPUT);
-    pinMode(channelFlamethrowerPin, INPUT);
+    pinMode(throttlePin, INPUT);
+    pinMode(steeringPin, INPUT);
+    pinMode(gearPin, INPUT);
+    pinMode(turretRotationPin, INPUT);
+    pinMode(turretElevationPin, INPUT);
+    pinMode(firePin, INPUT);
+
+    Serial.println("RCControl Initialized. Reading RC signals...");
 }
 
 RCControl::~RCControl() {
-    // Destructor logic if needed
+    // Any cleanup if needed
 }
 
 void RCControl::update() {
+    // Each loop, read RC signals
     readRCInputs();
 }
 
+bool RCControl::isConnected() const {
+    return true;
+}
+
 void RCControl::readRCInputs() {
-    // Read RC channel inputs (pseudo-code)
-    int throttleInput = pulseIn(channelThrottlePin, HIGH, 25000); // Read pulse width in microseconds
-    int steeringInput = pulseIn(channelSteeringPin, HIGH, 25000);
-    int gearInput = pulseIn(channelGearPin, HIGH, 25000);
-    int turretRotationInput = pulseIn(channelTurretRotationPin, HIGH, 25000);
-    int turretElevationInput = pulseIn(channelTurretElevationPin, HIGH, 25000);
-    int flamethrowerInput = pulseIn(channelFlamethrowerPin, HIGH, 25000);
+    // Read pulse widths (in microseconds) from each channel
+    // e.g., typical RC range ~1000 - 2000 microseconds
+    unsigned long throttleVal       = pulseIn(throttlePin, HIGH, 25000);
+    unsigned long steeringVal       = pulseIn(steeringPin, HIGH, 25000);
+    unsigned long gearVal           = pulseIn(gearPin, HIGH, 25000);
+    unsigned long turretRotVal      = pulseIn(turretRotationPin, HIGH, 25000);
+    unsigned long turretElevVal     = pulseIn(turretElevationPin, HIGH, 25000);
+    unsigned long fireVal           = pulseIn(firePin, HIGH, 25000);
 
-    // Map inputs to control variables
-    // Adjust the mapping ranges based on your RC transmitter's configuration
+    // Convert pulses to a -100..100 range or 1..5 for gear
+    int forwardBackward = map(throttleVal, 1000, 2000, -100, 100);
+    int turn            = map(steeringVal, 1000, 2000, -100, 100);
 
-    // Throttle: Typically 1000 to 2000 microseconds
-    int forwardBackward = map(throttleInput, 1000, 2000, -100, 100);
-    int turn = map(steeringInput, 1000, 2000, -100, 100);
+    // Gear
+    int gearValue = map(gearVal, 1000, 2000, 1, 5);
+    gearValue = constrain(gearValue, 1, 5);
+    currentGear = gearValue;
 
-    float gearScaling = (float)currentGear / 5;
-
-    leftTrackSpeed = constrain((forwardBackward + turn) * gearScaling, -100, 100);
+    // Combine forward/back + turn for each track
+    float gearScaling = (float)currentGear / 5.0f;
+    leftTrackSpeed  = constrain((forwardBackward + turn) * gearScaling, -100, 100);
     rightTrackSpeed = constrain((forwardBackward - turn) * gearScaling, -100, 100);
 
-    // Gear shifting
-    int gearValue = map(gearInput, 1000, 2000, 1, 5);
-    currentGear = constrain(gearValue, 1, 5);
+    // Turret
+    turretRotation = map(turretRotVal, 1000, 2000, -100, 100);
+    turretElevation= map(turretElevVal, 1000, 2000, -100, 100);
 
-    // Turret control
-    turretRotation = map(turretRotationInput, 1000, 2000, -100, 100);
-    turretElevation = map(turretElevationInput, 1000, 2000, -100, 100);
+    // Flamethrower if e.g. > 1500 microseconds
+    flamethrowerActive = (fireVal > 1500);
 
-    // Flamethrower activation
-    flamethrowerActive = (flamethrowerInput > 1500); // Adjust threshold as needed
+    // Debug (optional)
+    // Serial.printf("RC: throttle=%lu steer=%lu gear=%lu turretR=%lu turretE=%lu fire=%lu\n",
+    //              throttleVal, steeringVal, gearVal, turretRotVal, turretElevVal, fireVal);
 }
 
 int RCControl::getLeftTrackSpeed() const {

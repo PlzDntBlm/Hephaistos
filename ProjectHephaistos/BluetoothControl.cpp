@@ -1,47 +1,53 @@
 #include "BluetoothControl.h"
 
-// Initialize static instance pointer
+// Static members must be defined outside the class
 BluetoothControl* BluetoothControl::instance = nullptr;
-
-// DPAD constants
-#define DPAD_CENTERED    0x00
-#define DPAD_UP          0x01
-#define DPAD_UP_RIGHT    0x02
-#define DPAD_RIGHT       0x03
-#define DPAD_DOWN_RIGHT  0x04
-#define DPAD_DOWN        0x05
-#define DPAD_DOWN_LEFT   0x06
-#define DPAD_LEFT        0x07
-#define DPAD_UP_LEFT     0x08
+ControllerPtr BluetoothControl::controller = nullptr;
 
 BluetoothControl::BluetoothControl()
-    : controller(nullptr),
-      currentGear(1),
+    : currentGear(1),
       leftTrackSpeed(0),
       rightTrackSpeed(0),
       turretRotation(0),
       turretElevation(0),
-      flamethrowerActive(false) {
+      flamethrowerActive(false),
+      forwardPressed(false),
+      backPressed(false),
+      leftPressed(false),
+      rightPressed(false),
+      turretLeftPressed(false),
+      turretRightPressed(false),
+      turretElevatePressed(false),
+      turretLowerPressed(false),
+      firePressed(false),
+      lastUpdateTime(0)
+{
     instance = this;
 
     // Initialize Bluepad32
     BP32.setup(&BluetoothControl::onConnectedController, &BluetoothControl::onDisconnectedController);
-
-    // Enable new Bluetooth connections
     BP32.enableNewBluetoothConnections(true);
+
+    Serial.println("BluetoothControl Initialized. Waiting for gamepad...");
 }
 
 BluetoothControl::~BluetoothControl() {
-    BP32.forgetBluetoothKeys();
+    // Optionally forget Bluetooth keys if you want to force re-pairing
+    // BP32.forgetBluetoothKeys();
 }
 
 void BluetoothControl::update() {
     // Fetch controller data
     BP32.update();
 
+    // If there's a connected controller, process it
     if (controller && controller->isConnected()) {
         processGamepad(controller);
     }
+}
+
+bool BluetoothControl::isConnected() const {
+    return (controller && controller->isConnected());
 }
 
 int BluetoothControl::getLeftTrackSpeed() const {
@@ -68,47 +74,142 @@ int BluetoothControl::getCurrentGear() const {
     return currentGear;
 }
 
-// Static callback functions
+// ----------------------
+// Static Callbacks
+// ----------------------
 void BluetoothControl::onConnectedController(ControllerPtr ctl) {
-    Serial.println("Controller connected via Bluetooth.");
-    instance->controller = ctl;
+    Serial.println("Gamepad connected via Bluetooth.");
+    controller = ctl;
 }
 
 void BluetoothControl::onDisconnectedController(ControllerPtr ctl) {
-    Serial.println("Controller disconnected from Bluetooth.");
-    instance->controller = nullptr;
+    Serial.println("Gamepad disconnected.");
+    if (ctl == controller) {
+        controller = nullptr;
+    }
 }
 
+// ----------------------
+// Process Gamepad
+// ----------------------
 void BluetoothControl::processGamepad(ControllerPtr ctl) {
-    // Read the D-Pad value
-    uint8_t dpad = ctl->dpad();
+    // Limit update rate
+    unsigned long currentTime = millis();
+    if (currentTime - lastUpdateTime < updateInterval) {
+        return;
+    }
+    lastUpdateTime = currentTime;
 
-    // Update gear based on D-Pad inputs
-    if ((dpad == DPAD_UP || dpad == DPAD_UP_LEFT || dpad == DPAD_UP_RIGHT) && currentGear < 5) {
-        currentGear++;
-    } else if ((dpad == DPAD_DOWN || dpad == DPAD_DOWN_LEFT || dpad == DPAD_DOWN_RIGHT) && currentGear > 1) {
-        currentGear--;
+    // Reset the pressed states
+    forwardPressed       = false;
+    backPressed          = false;
+    leftPressed          = false;
+    rightPressed         = false;
+    turretLeftPressed    = false;
+    turretRightPressed   = false;
+    turretElevatePressed = false;
+    turretLowerPressed   = false;
+    firePressed          = false;
+
+    // Example usage: interpret left joystick Y for forward/back
+    // (on many controllers, up is negative Y, so adjust logic as needed)
+    int16_t axisY = ctl->axisY(); // -512 up, +511 down
+    if (axisY < -100) { 
+        forwardPressed = true; 
+    } else if (axisY > 100) { 
+        backPressed = true; 
     }
 
-    // Read joystick inputs
-    int16_t leftJoystickY = ctl->axisY();
-    int16_t leftJoystickX = ctl->axisX();
-    int16_t rightJoystickX = ctl->axisRX();
-    int16_t rightJoystickY = ctl->axisRY();
+    // Interpret left joystick X for turning
+    int16_t axisX = ctl->axisX(); // -512 left, +511 right
+    if (axisX < -100) {
+        leftPressed = true;
+    } else if (axisX > 100) {
+        rightPressed = true;
+    }
 
-    // Map joystick values
-    int forwardBackward = map(leftJoystickY, -512, 511, 100, -100);
-    int turn = map(leftJoystickX, -512, 511, -100, 100);
+    // For turret: use right joystick or certain buttons
+    int16_t axisRX = ctl->axisRX();  // -512 left, +511 right
+    int16_t axisRY = ctl->axisRY();  // -512 up, +511 down
 
-    float gearScaling = (float)currentGear / 5;
+    if (axisRX < -100) {
+        turretLeftPressed = true;
+    } else if (axisRX > 100) {
+        turretRightPressed = true;
+    }
 
-    leftTrackSpeed = constrain((forwardBackward + turn) * gearScaling, -100, 100);
+    if (axisRY < -100) {
+        turretElevatePressed = true;
+    } else if (axisRY > 100) {
+        turretLowerPressed = true;
+    }
+
+    // Check a button for flamethrower
+    // For example, "A" button on many controllers
+    if (ctl->a()) {
+        firePressed = true;
+    }
+
+    // Gear shifting with D-Pad up/down
+    uint8_t dpadVal = ctl->dpad();
+    // dpad() returns 0x00 to 0x08 or 0x0F depending on library
+    // We'll do a simple check if dpadVal == DPAD_UP or DPAD_DOWN
+    if (dpadVal == DPAD_UP && currentGear < 5) {
+        currentGear++;
+        Serial.printf("Gear shifted up to %d\n", currentGear);
+    } else if (dpadVal == DPAD_DOWN && currentGear > 1) {
+        currentGear--;
+        Serial.printf("Gear shifted down to %d\n", currentGear);
+    }
+
+    // Now we update the control variables
+    updateControlVariables();
+}
+
+// ----------------------
+// updateControlVariables
+// ----------------------
+void BluetoothControl::updateControlVariables() {
+    // Movement
+    int forwardBackward = 0;
+    int turn = 0;
+
+    if (forwardPressed) {
+        forwardBackward += 100;
+    }
+    if (backPressed) {
+        forwardBackward -= 100;
+    }
+    if (leftPressed) {
+        turn -= 100;
+    }
+    if (rightPressed) {
+        turn += 100;
+    }
+
+    // Gear scaling
+    float gearScaling = (float)currentGear / 5.0f;
+
+    leftTrackSpeed  = constrain((forwardBackward + turn) * gearScaling, -100, 100);
     rightTrackSpeed = constrain((forwardBackward - turn) * gearScaling, -100, 100);
 
-    turretRotation = map(rightJoystickX, -512, 511, -100, 100);
-    turretElevation = map(rightJoystickY, -512, 511, 100, -100);
+    // Turret
+    if (turretLeftPressed) {
+        turretRotation = -100;
+    } else if (turretRightPressed) {
+        turretRotation = 100;
+    } else {
+        turretRotation = 0;
+    }
 
-    // Flamethrower activation
-    int16_t throttle = ctl->throttle();
-    flamethrowerActive = (throttle > 100);
+    if (turretElevatePressed) {
+        turretElevation = 100;
+    } else if (turretLowerPressed) {
+        turretElevation = -100;
+    } else {
+        turretElevation = 0;
+    }
+
+    // Flamethrower
+    flamethrowerActive = firePressed;
 }

@@ -2,6 +2,7 @@
 #define RC_CONTROL_H
 
 #include "TankControlInterface.h"
+#include <Arduino.h>
 
 class RCControl : public TankControlInterface {
 public:
@@ -9,6 +10,8 @@ public:
     ~RCControl();
 
     void update() override;
+
+    bool isConnected() const override;
 
     int getLeftTrackSpeed() const override;
     int getRightTrackSpeed() const override;
@@ -21,8 +24,13 @@ public:
     int getCurrentGear() const override;
 
 private:
-    // Internal methods and variables
-    void readRCInputs();
+    // Pins for RC receiver signals
+    static const int throttlePin       = 2; // Movement forward/back
+    static const int steeringPin       = 3; // Left/right turning
+    static const int gearPin           = 4; // Gear shifting
+    static const int turretRotationPin = 5; // Turret left/right
+    static const int turretElevationPin= 6; // Turret up/down
+    static const int firePin           = 7; // Flamethrower
 
     // Control variables
     int currentGear;
@@ -32,13 +40,8 @@ private:
     int turretElevation;
     bool flamethrowerActive;
 
-    // RC input pins
-    static const int channelThrottlePin = 2; // Example pin numbers
-    static const int channelSteeringPin = 3;
-    static const int channelGearPin = 4;
-    static const int channelTurretRotationPin = 5;
-    static const int channelTurretElevationPin = 6;
-    static const int channelFlamethrowerPin = 7;
+    // Internal reading method
+    void readRCInputs();
 };
 
 #endif // RC_CONTROL_H

@@ -41,6 +41,10 @@ void SerialControl::update() {
     }
 }
 
+bool SerialControl::isConnected() const {
+    return true;
+}
+
 void SerialControl::processSerialInput() {
     // Read lines from Serial
     while (Serial.available()) {

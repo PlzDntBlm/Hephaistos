@@ -6,7 +6,7 @@ import threading
 from pynput import keyboard
 
 # Update this with the correct serial port (e.g., COM5 on Windows, /dev/ttyUSB0 on Linux)
-SERIAL_PORT = 'COM10'  # Replace with your port
+SERIAL_PORT = 'COM3'  # Replace with your port
 BAUD_RATE = 115200
 
 try:

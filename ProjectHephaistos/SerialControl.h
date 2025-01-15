@@ -11,6 +11,8 @@ public:
 
     void update() override;
 
+    bool isConnected() const override;
+
     int getLeftTrackSpeed() const override;
     int getRightTrackSpeed() const override;
 

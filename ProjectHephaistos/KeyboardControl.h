@@ -2,7 +2,8 @@
 #define KEYBOARD_CONTROL_H
 
 #include "TankControlInterface.h"
-#include <Bluepad32.h>
+#include <Arduino.h>
+#include <Bluepad32.h> // to detect keyboard events
 
 class KeyboardControl : public TankControlInterface {
 public:
@@ -10,6 +11,8 @@ public:
     ~KeyboardControl();
 
     void update() override;
+
+    bool isConnected() const override;
 
     int getLeftTrackSpeed() const override;
     int getRightTrackSpeed() const override;
@@ -22,14 +25,14 @@ public:
     int getCurrentGear() const override;
 
 private:
-    // Internal methods and variables
     static void onConnectedController(ControllerPtr ctl);
     static void onDisconnectedController(ControllerPtr ctl);
 
     void processKeyboard(ControllerPtr ctl);
+    void updateControlVariables();
 
-    // Controller instance
-    ControllerPtr keyboardController;
+    static ControllerPtr keyboardController;
+    static KeyboardControl* instance;
 
     // Control variables
     int currentGear;
@@ -39,25 +42,19 @@ private:
     int turretElevation;
     bool flamethrowerActive;
 
-    // Static instance for callbacks
-    static KeyboardControl* instance;
-
-    // Key states
-    bool wPressed;
-    bool sPressed;
-    bool aPressed;
-    bool dPressed;
-    bool upPressed;
-    bool downPressed;
+    // State variables
+    bool forwardPressed;
+    bool backPressed;
     bool leftPressed;
     bool rightPressed;
-    bool ePressed;
-    bool qPressed;
-    bool spacePressed;
+    bool turretLeftPressed;
+    bool turretRightPressed;
+    bool turretElevatePressed;
+    bool turretLowerPressed;
+    bool firePressed;
 
-    // Timing variables for smooth control
     unsigned long lastUpdateTime;
-    const unsigned long updateInterval = 50; // in milliseconds
+    const unsigned long updateInterval = 50; // ms
 };
 
 #endif // KEYBOARD_CONTROL_H

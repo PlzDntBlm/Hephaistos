@@ -21,6 +21,9 @@ public:
 
     // Getter for current gear
     virtual int getCurrentGear() const = 0;
+
+    // Getter for connection status
+    virtual bool isConnected() const = 0;
 };
 
 #endif // TANK_CONTROL_INTERFACE_H
